@@ -1,0 +1,24 @@
+{
+  "name": "ncstate-basketball-scraper",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RunItBack1127/ncstate-basketball-scraper.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/RunItBack1127/ncstate-basketball-scraper/issues"
+  },
+  "homepage": "https://github.com/RunItBack1127/ncstate-basketball-scraper#readme",
+  "dependencies": {
+    "jsdom": "^19.0.0",
+    "node-fetch": "^2.6.6"
+  }
+}
