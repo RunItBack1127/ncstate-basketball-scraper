@@ -183,7 +183,7 @@ const NAME_REGEX = new RegExp("(NO\\.\\s*[-RV0-9/]*\\s*)|(\\#[0-9/RV]*\\s*)|(\\s
                 time: {
                     date: gameDate,
                     dayOfWeek: gameDOW,
-                    advertisedTimes: gameTimes[0]
+                    advertisedTimes: gameTimes
                 },
                 isWin: winLoss === "W",
                 isACCTournamentGame: isACCGame,
