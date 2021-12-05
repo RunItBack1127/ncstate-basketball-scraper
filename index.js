@@ -1,14 +1,226 @@
 const fetch = require("node-fetch");
 const jsdom = require("jsdom");
+const express = require("express");
 
-const ALL_GAMES = [];
-const UPCOMING_GAMES = [];
-const PAST_GAMES = [];
+const GAMES_CACHE = {
+    mens: {
+        allGames: [],
+        upcomingGames: [],
+        pastGames: [],
+        wonGames: [],
+        lostGames: [],
+        tournamentGames: []
+    },
+    womens: {
+        allGames: [],
+        upcomingGames: [],
+        pastGames: [],
+        wonGames: [],
+        lostGames: [],
+        tournamentGames: []
+    }
+};
+
+const FILTERS = {
+    MENS_GAMES: 0x1C2B5,
+    WOMENS_GAMES: 0x2A402,
+    ALL_GAMES: 0x1AC4,
+    UPCOMING_GAMES: 0xCC32,
+    PAST_GAMES: 0x5FEB,
+    WON_GAMES: 0x289107,
+    LOST_GAMES: 0x32D691,
+    TOURNAMENT_GAMES: 0x43822
+};
+
+const SERVER_SRC_URLS = {
+    prefix: "gopack.com",
+    mensURL: "https://gopack.com/sports/mens-basketball/schedule/",
+    womensURL: "https://gopack.com/sports/womens-basketball/schedule/"
+};
+
+const FETCH_CMDS = {
+    mens: 0x01,
+    womens: 0x02
+};
 
 const NAME_REGEX = new RegExp("(NO\\.\\s*[-RV0-9/]*\\s*)|(\\#[0-9/RV]*\\s*)|(\\s*\\([A-Za-z/0-9-.]*\\))");
 
-(async() => {
-    const bballSite = await fetch("https://gopack.com/sports/mens-basketball/schedule/");
+function _RETRIEVE_BASKETBALL_DATA(filters) {
+
+    const wonPastGames = [];
+    const lostPastGames = [];
+    const wonTournamentGames = [];
+    const lostTournamentGames = [];
+    const pastTournamentGames = [];
+    const upcomingTournamentGames = [];
+    const pastWonTournamentGames = [];
+    const pastLostTournamentGames = [];
+
+    switch(filters) {
+        case 0x1DAF5:
+            return JSON.stringify(GAMES_CACHE.mens.allGames);
+        case 0x2BEC6:
+            return JSON.stringify(GAMES_CACHE.womens.allGames);
+        case 0x1CEB7:
+            return JSON.stringify(GAMES_CACHE.mens.upcomingGames);
+        case 0x2EC32:
+            return JSON.stringify(GAMES_CACHE.womens.upcomingGames);
+        case 0x1DFFF:
+            return JSON.stringify(GAMES_CACHE.mens.pastGames);
+        case 0x2FFEB:
+            return JSON.stringify(GAMES_CACHE.womens.pastGames);
+        case 0x1D3B7:
+            return JSON.stringify(GAMES_CACHE.mens.wonGames);
+        case 0x2B507:
+            return JSON.stringify(GAMES_CACHE.womens.wonGames);
+        case 0x1D6B5:
+            return JSON.stringify(GAMES_CACHE.mens.lostGames);
+        case 0x2F693:
+            return JSON.stringify(GAMES_CACHE.womens.lostGames);
+        case 0x5FAB7:
+            return JSON.stringify(GAMES_CACHE.mens.tournamentGames);
+        case 0x6BC22:
+            return JSON.stringify(GAMES_CACHE.womens.tournamentGames);
+        case 0x29DFFF:
+            for(const game of GAMES_CACHE.mens.pastGames) {
+                if(game.gameInfo.isWin) {
+                    wonPastGames.push(game);
+                }
+            }
+            return JSON.stringify(wonPastGames);
+        case 0x2AFFEF:
+            for(const game of GAMES_CACHE.womens.pastGames) {
+                if(game.gameInfo.isWin) {
+                    wonPastGames.push(game);
+                }
+            }
+            return JSON.stringify(wonPastGames);
+        case 0x33DFFF:
+            for(const game of GAMES_CACHE.mens.pastGames) {
+                if(!game.gameInfo.isWin) {
+                    lostPastGames.push(game);
+                }
+            }
+            return JSON.stringify(lostPastGames);
+        case 0x32FFFB:
+            for(const game of GAMES_CACHE.womens.pastGames) {
+                if(!game.gameInfo.isWin) {
+                    lostPastGames.push(game);
+                }
+            }
+            return JSON.stringify(lostPastGames);
+        case 0x2DFBB7:
+            if(GAMES_CACHE.mens.tournamentGames.length === 0) {
+                return JSON.stringify(wonTournamentGames);
+            }
+            for(const game of GAMES_CACHE.mens.tournamentGames) {
+                if(game.gameInfo.isWin) {
+                    wonTournamentGames.push(game);
+                }
+            }
+            return JSON.stringify(wonTournamentGames);
+        case 0x2EBD27:
+            if(GAMES_CACHE.womens.tournamentGames.length === 0) {
+                return JSON.stringify(wonTournamentGames);
+            }
+            for(const game of GAMES_CACHE.womens.tournamentGames) {
+                if(game.gameInfo.isWin) {
+                    wonTournamentGames.push(game);
+                }
+            }
+            return JSON.stringify(wonTournamentGames);
+        case 0x37FEB7:
+            if(GAMES_CACHE.mens.tournamentGames.length === 0) {
+                return JSON.stringify(lostTournamentGames);
+            }
+            for(const game of GAMES_CACHE.mens.tournamentGames) {
+                if(!game.gameInfo.isWin) {
+                    lostTournamentGames.push(game);
+                }
+            }
+            return JSON.stringify(lostTournamentGames);
+        case 0x36FEB3:
+            for(const game of GAMES_CACHE.womens.tournamentGames) {
+                if(!game.gameInfo.isWin) {
+                    lostTournamentGames.push(game);
+                }
+            }
+            return JSON.stringify(lostTournamentGames);
+        case 0x5FFFF:
+            for(const game of GAMES_CACHE.mens.pastGames) {
+                if(game.gameInfo.isACCTournamentGame) {
+                    pastTournamentGames.push(game);
+                }
+            }
+            return JSON.stringify(pastTournamentGames);
+        case 0x6FFEB:
+            for(const game of GAMES_CACHE.womens.pastGames) {
+                if(game.gameInfo.isACCTournamentGame) {
+                    pastTournamentGames.push(game);
+                }
+            }
+            return JSON.stringify(pastTournamentGames);
+        case 0x5FEB7:
+            for(const game of GAMES_CACHE.mens.upcomingGames) {
+                if(game.gameInfo.isACCTournamentGame) {
+                    upcomingTournamentGames.push(game);
+                }
+            }
+            return JSON.stringify(upcomingTournamentGames);
+        case 0x6FC32:
+            for(const game of GAMES_CACHE.womens.upcomingGames) {
+                if(game.gameInfo.isACCTournamentGame) {
+                    upcomingTournamentGames.push(game);
+                }
+            }
+            return JSON.stringify(upcomingTournamentGames);
+        case 0x2DFFFF:
+            for(const game of GAMES_CACHE.mens.pastGames) {
+                if(game.gameInfo.isACCTournamentGame &&
+                    game.gameInfo.isWin) {
+                    pastWonTournamentGames.push(game);
+                }
+            }
+            return JSON.stringify(pastWonTournamentGames);
+        case 0x2EFFEF:
+            for(const game of GAMES_CACHE.womens.pastGames) {
+                if(game.gameInfo.isACCTournamentGame &&
+                    game.gameInfo.isWin) {
+                    pastWonTournamentGames.push(game);
+                }
+            }
+            return JSON.stringify(pastWonTournamentGames);
+        case 0x37FFFF:
+            for(const game of GAMES_CACHE.mens.pastGames) {
+                if(game.gameInfo.isACCTournamentGame &&
+                    !game.gameInfo.isWin) {
+                    pastLostTournamentGames.push(game);
+                }
+            }
+            return JSON.stringify(pastLostTournamentGames);
+        case 0x33FFFB:
+            for(const game of GAMES_CACHE.womens.pastGames) {
+                if(game.gameInfo.isACCTournamentGame &&
+                    !game.gameInfo.isWin) {
+                    pastLostTournamentGames.push(game);
+                }
+            }
+            return JSON.stringify(pastLostTournamentGames);
+        
+    }
+}
+
+async function _FETCH_BASKETBALL_DATA(fetchCmd) {
+
+    let bballSite;
+
+    switch(fetchCmd) {
+        case FETCH_CMDS.mens:
+            bballSite = await fetch(SERVER_SRC_URLS.mensURL);
+        case FETCH_CMDS.womens:
+            bballSite = await fetch(SERVER_SRC_URLS.womensURL);
+    };
+
     const bballText = await bballSite.text();
     
     const bballDOM = new jsdom.JSDOM(bballText);
@@ -206,14 +418,35 @@ const NAME_REGEX = new RegExp("(NO\\.\\s*[-RV0-9/]*\\s*)|(\\#[0-9/RV]*\\s*)|(\\s
             }  
         };
 
-        ALL_GAMES.push(game);
+        switch(fetchCmd) {
+            case FETCH_CMDS.mens:
+                GAMES_CACHE.mens.allGames.push(game);
 
-        if(winLoss === "N/A") {
-            UPCOMING_GAMES.push(game);
-        }
+                if(winLoss === "N/A") {
+                    GAMES_CACHE.mens.upcomingGames.push(game);
+                }
 
-        if(gameScore !== "N/A") {
-            PAST_GAMES.push(game);
+                if(gameScore !== "N/A") {
+                    GAMES_CACHE.mens.pastGames.push(game);
+                }
+                break;
+            case FETCH_CMDS.womens:
+                GAMES_CACHE.womens.allGames.push(game);
+
+                if(winLoss === "N/A") {
+                    GAMES_CACHE.womens.upcomingGames.push(game);
+                }
+
+                if(gameScore !== "N/A") {
+                    GAMES_CACHE.womens.pastGames.push(game);
+                }
+                break;
         }
     }
+}
+
+(async function _INIT_SERVER_CACHES() {
+    await _FETCH_BASKETBALL_DATA(FETCH_CMDS.mens);
+    await _FETCH_BASKETBALL_DATA(FETCH_CMDS.womens);
+    setTimeout(_INIT_SERVER_CACHES, 10000);
 })();
