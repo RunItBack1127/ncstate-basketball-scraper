@@ -1,16 +1,16 @@
 const fetch = require("node-fetch");
 const jsdom = require("jsdom");
 const express = require("express");
-// const path = require("path");
+const path = require("path");
 
 const bballServer = express();
 
 const BBALL_SERVER_PORT = 9696;
 const SERVER_SCRAPE_INTERVAL = 10 * 60 * 1000;
 
-// bballServer.get("/", (req, res) => {
-//     res.sendFile(path.join(__dirname, "index.html"));
-// });
+bballServer.get("/", (req, res) => {
+    res.sendFile(path.join(__dirname, "index.html"));
+});
 
 bballServer.get("/games", (req, res) => {
     let filter;
@@ -542,4 +542,4 @@ async function _FETCH_BASKETBALL_DATA(fetchCmd) {
     setTimeout(_INIT_SERVER_CACHES, SERVER_SCRAPE_INTERVAL);
 })();
 
-bballServer.listen(BBALL_SERVER_PORT);
+bballServer.listen(process.env.PORT || BBALL_SERVER_PORT);
