@@ -7,7 +7,7 @@ const bballServer = express();
 const BBALL_SERVER_PORT = 9696;
 const SERVER_SCRAPE_INTERVAL = 10 * 60 * 1000;
 
-bballServer.get("/", (req, res) => {
+bballServer.get("/games", (req, res) => {
     let filter;
 
     if(req.query.mensGames === "true") {
