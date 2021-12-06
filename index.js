@@ -1,7 +1,6 @@
 const fetch = require("node-fetch");
 const jsdom = require("jsdom");
 const express = require("express");
-const path = require("path");
 
 const bballServer = express();
 
@@ -9,16 +8,12 @@ const BBALL_SERVER_PORT = 9696;
 const SERVER_SCRAPE_INTERVAL = 10 * 60 * 1000;
 
 bballServer.get("/", (req, res) => {
-    res.sendFile(path.join(__dirname, "index.html"));
-});
-
-bballServer.get("/games", (req, res) => {
     let filter;
 
-    if(req.query.mensGame === "true") {
+    if(req.query.mensGames === "true") {
         filter = FILTERS.MENS_GAMES;
     }
-    else if(req.query.womensGame === "true") {
+    else if(req.query.womensGames === "true") {
         filter = FILTERS.WOMENS_GAMES;
     }
 
