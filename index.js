@@ -1,6 +1,71 @@
 const fetch = require("node-fetch");
 const jsdom = require("jsdom");
 const express = require("express");
+// const path = require("path");
+
+const bballServer = express();
+
+const BBALL_SERVER_PORT = 9696;
+const SERVER_SCRAPE_INTERVAL = 10 * 60 * 1000;
+
+// bballServer.get("/", (req, res) => {
+//     res.sendFile(path.join(__dirname, "index.html"));
+// });
+
+bballServer.get("/games", (req, res) => {
+    let filter;
+
+    if(req.query.mensGame === "true") {
+        filter = FILTERS.MENS_GAMES;
+    }
+    else if(req.query.womensGame === "true") {
+        filter = FILTERS.WOMENS_GAMES;
+    }
+
+    if(req.query.allGames === "true") {
+        filter |= FILTERS.ALL_GAMES;
+    }
+    else if(req.query.upcomingGames === "true") {
+        filter |= FILTERS.UPCOMING_GAMES;
+
+        if(req.query.conferenceGames === "true") {
+            filter |= FILTERS.TOURNAMENT_GAMES;
+        }
+    }
+    else if(req.query.pastGames === "true") {
+        filter |= FILTERS.PAST_GAMES;
+
+        if(req.query.wonGames === "true") {
+            filter |= FILTERS.WON_GAMES;
+
+            if(req.query.conferenceGames === "true") {
+                filter |= FILTERS.TOURNAMENT_GAMES;
+            }
+        }
+        else if(req.query.lostGames === "true") {
+            filter |= FILTERS.LOST_GAMES;
+
+            if(req.query.conferenceGames === "true") {
+                filter |= FILTERS.TOURNAMENT_GAMES;
+            }
+        }
+        else if(req.query.conferenceGames === "true") {
+            filter |= FILTERS.TOURNAMENT_GAMES;
+        }
+    }
+    else if(req.query.wonGames === "true") {
+        filter |= FILTERS.WON_GAMES;
+    }
+    else if(req.query.lostGames === "true") {
+        filter |= FILTERS.LOST_GAMES;
+    }
+    else if(req.query.conferenceGames === "true") {
+        filter |= FILTERS.TOURNAMENT_GAMES;
+    }
+
+    res.setHeader('ContentType', 'application/json');
+    res.end(_RETRIEVE_BASKETBALL_DATA(filter));
+});
 
 const GAMES_CACHE = {
     mens: {
@@ -9,7 +74,7 @@ const GAMES_CACHE = {
         pastGames: [],
         wonGames: [],
         lostGames: [],
-        tournamentGames: []
+        conferenceGames: []
     },
     womens: {
         allGames: [],
@@ -17,7 +82,7 @@ const GAMES_CACHE = {
         pastGames: [],
         wonGames: [],
         lostGames: [],
-        tournamentGames: []
+        conferenceGames: []
     }
 };
 
@@ -26,7 +91,7 @@ const FILTERS = {
     WOMENS_GAMES: 0x2A402,
     ALL_GAMES: 0x1AC4,
     UPCOMING_GAMES: 0xCC32,
-    PAST_GAMES: 0x5FEB,
+    PAST_GAMES: 0xA5FEB,
     WON_GAMES: 0x289107,
     LOST_GAMES: 0x32D691,
     TOURNAMENT_GAMES: 0x43822
@@ -38,23 +103,38 @@ const SERVER_SRC_URLS = {
     womensURL: "https://gopack.com/sports/womens-basketball/schedule/"
 };
 
+const DEFAULT_VALUES = {
+    unavailable: "N/A",
+    country: "United States",
+    ticketPrices: {
+        MAX: Number.MAX_SAFE_INTEGER,
+        MIN: Number.MIN_SAFE_INTEGER
+    }
+}
+
 const FETCH_CMDS = {
     mens: 0x01,
     womens: 0x02
 };
 
+/**
+ * Handles all defunct or otherwise naming conventions for opposing teams
+ * from previous iterations of the schedule website (see previous
+ * years of both Men's and Women's basketball for edge cases and
+ * fallthroughs)
+ */
 const NAME_REGEX = new RegExp("(NO\\.\\s*[-RV0-9/]*\\s*)|(\\#[0-9/RV]*\\s*)|(\\s*\\([A-Za-z/0-9-.]*\\))");
 
 function _RETRIEVE_BASKETBALL_DATA(filters) {
 
     const wonPastGames = [];
     const lostPastGames = [];
-    const wonTournamentGames = [];
-    const lostTournamentGames = [];
-    const pastTournamentGames = [];
-    const upcomingTournamentGames = [];
-    const pastWonTournamentGames = [];
-    const pastLostTournamentGames = [];
+    const wonConferenceGames = [];
+    const lostConferenceGames = [];
+    const pastConferenceGames = [];
+    const upcomingConferenceGames = [];
+    const pastWonConferenceGames = [];
+    const pastLostConferenceGames = [];
 
     switch(filters) {
         case 0x1DAF5:
@@ -65,9 +145,9 @@ function _RETRIEVE_BASKETBALL_DATA(filters) {
             return JSON.stringify(GAMES_CACHE.mens.upcomingGames);
         case 0x2EC32:
             return JSON.stringify(GAMES_CACHE.womens.upcomingGames);
-        case 0x1DFFF:
+        case 0xBDFFF:
             return JSON.stringify(GAMES_CACHE.mens.pastGames);
-        case 0x2FFEB:
+        case 0xAFFEB:
             return JSON.stringify(GAMES_CACHE.womens.pastGames);
         case 0x1D3B7:
             return JSON.stringify(GAMES_CACHE.mens.wonGames);
@@ -78,10 +158,10 @@ function _RETRIEVE_BASKETBALL_DATA(filters) {
         case 0x2F693:
             return JSON.stringify(GAMES_CACHE.womens.lostGames);
         case 0x5FAB7:
-            return JSON.stringify(GAMES_CACHE.mens.tournamentGames);
+            return JSON.stringify(GAMES_CACHE.mens.conferenceGames);
         case 0x6BC22:
-            return JSON.stringify(GAMES_CACHE.womens.tournamentGames);
-        case 0x29DFFF:
+            return JSON.stringify(GAMES_CACHE.womens.conferenceGames);
+        case 0x2BDFFF:
             for(const game of GAMES_CACHE.mens.pastGames) {
                 if(game.gameInfo.isWin) {
                     wonPastGames.push(game);
@@ -95,14 +175,14 @@ function _RETRIEVE_BASKETBALL_DATA(filters) {
                 }
             }
             return JSON.stringify(wonPastGames);
-        case 0x33DFFF:
+        case 0x3BDFFF:
             for(const game of GAMES_CACHE.mens.pastGames) {
                 if(!game.gameInfo.isWin) {
                     lostPastGames.push(game);
                 }
             }
             return JSON.stringify(lostPastGames);
-        case 0x32FFFB:
+        case 0x3AFFFB:
             for(const game of GAMES_CACHE.womens.pastGames) {
                 if(!game.gameInfo.isWin) {
                     lostPastGames.push(game);
@@ -110,102 +190,102 @@ function _RETRIEVE_BASKETBALL_DATA(filters) {
             }
             return JSON.stringify(lostPastGames);
         case 0x2DFBB7:
-            if(GAMES_CACHE.mens.tournamentGames.length === 0) {
-                return JSON.stringify(wonTournamentGames);
+            if(GAMES_CACHE.mens.conferenceGames.length === 0) {
+                return JSON.stringify(wonConferenceGames);
             }
-            for(const game of GAMES_CACHE.mens.tournamentGames) {
+            for(const game of GAMES_CACHE.mens.conferenceGames) {
                 if(game.gameInfo.isWin) {
-                    wonTournamentGames.push(game);
+                    wonConferenceGames.push(game);
                 }
             }
-            return JSON.stringify(wonTournamentGames);
+            return JSON.stringify(wonConferenceGames);
         case 0x2EBD27:
-            if(GAMES_CACHE.womens.tournamentGames.length === 0) {
-                return JSON.stringify(wonTournamentGames);
+            if(GAMES_CACHE.womens.conferenceGames.length === 0) {
+                return JSON.stringify(wonConferenceGames);
             }
-            for(const game of GAMES_CACHE.womens.tournamentGames) {
+            for(const game of GAMES_CACHE.womens.conferenceGames) {
                 if(game.gameInfo.isWin) {
-                    wonTournamentGames.push(game);
+                    wonConferenceGames.push(game);
                 }
             }
-            return JSON.stringify(wonTournamentGames);
+            return JSON.stringify(wonConferenceGames);
         case 0x37FEB7:
-            if(GAMES_CACHE.mens.tournamentGames.length === 0) {
-                return JSON.stringify(lostTournamentGames);
+            if(GAMES_CACHE.mens.conferenceGames.length === 0) {
+                return JSON.stringify(lostConferenceGames);
             }
-            for(const game of GAMES_CACHE.mens.tournamentGames) {
+            for(const game of GAMES_CACHE.mens.conferenceGames) {
                 if(!game.gameInfo.isWin) {
-                    lostTournamentGames.push(game);
+                    lostConferenceGames.push(game);
                 }
             }
-            return JSON.stringify(lostTournamentGames);
+            return JSON.stringify(lostConferenceGames);
         case 0x36FEB3:
-            for(const game of GAMES_CACHE.womens.tournamentGames) {
+            for(const game of GAMES_CACHE.womens.conferenceGames) {
                 if(!game.gameInfo.isWin) {
-                    lostTournamentGames.push(game);
+                    lostConferenceGames.push(game);
                 }
             }
-            return JSON.stringify(lostTournamentGames);
-        case 0x5FFFF:
-            for(const game of GAMES_CACHE.mens.pastGames) {
-                if(game.gameInfo.isACCTournamentGame) {
-                    pastTournamentGames.push(game);
-                }
-            }
-            return JSON.stringify(pastTournamentGames);
-        case 0x6FFEB:
-            for(const game of GAMES_CACHE.womens.pastGames) {
-                if(game.gameInfo.isACCTournamentGame) {
-                    pastTournamentGames.push(game);
-                }
-            }
-            return JSON.stringify(pastTournamentGames);
+            return JSON.stringify(lostConferenceGames);
+        // case 0xFFFFF:
+        //     for(const game of GAMES_CACHE.mens.pastGames) {
+        //         if(game.gameInfo.isACCConferenceGame) {
+        //             pastConferenceGames.push(game);
+        //         }
+        //     }
+        //     return JSON.stringify(pastConferenceGames);
+        // case 0xEFFEB:
+        //     for(const game of GAMES_CACHE.womens.pastGames) {
+        //         if(game.gameInfo.isACCConferenceGame) {
+        //             pastConferenceGames.push(game);
+        //         }
+        //     }
+        //     return JSON.stringify(pastConferenceGames);
         case 0x5FEB7:
             for(const game of GAMES_CACHE.mens.upcomingGames) {
-                if(game.gameInfo.isACCTournamentGame) {
-                    upcomingTournamentGames.push(game);
+                if(game.gameInfo.isACCConferenceGame) {
+                    upcomingConferenceGames.push(game);
                 }
             }
-            return JSON.stringify(upcomingTournamentGames);
+            return JSON.stringify(upcomingConferenceGames);
         case 0x6FC32:
             for(const game of GAMES_CACHE.womens.upcomingGames) {
-                if(game.gameInfo.isACCTournamentGame) {
-                    upcomingTournamentGames.push(game);
+                if(game.gameInfo.isACCConferenceGame) {
+                    upcomingConferenceGames.push(game);
                 }
             }
-            return JSON.stringify(upcomingTournamentGames);
-        case 0x2DFFFF:
+            return JSON.stringify(upcomingConferenceGames);
+        case 0x2FFFFF:
             for(const game of GAMES_CACHE.mens.pastGames) {
-                if(game.gameInfo.isACCTournamentGame &&
+                if(game.gameInfo.isACCConferenceGame &&
                     game.gameInfo.isWin) {
-                    pastWonTournamentGames.push(game);
+                    pastWonConferenceGames.push(game);
                 }
             }
-            return JSON.stringify(pastWonTournamentGames);
+            return JSON.stringify(pastWonConferenceGames);
         case 0x2EFFEF:
             for(const game of GAMES_CACHE.womens.pastGames) {
-                if(game.gameInfo.isACCTournamentGame &&
+                if(game.gameInfo.isACCConferenceGame &&
                     game.gameInfo.isWin) {
-                    pastWonTournamentGames.push(game);
+                    pastWonConferenceGames.push(game);
                 }
             }
-            return JSON.stringify(pastWonTournamentGames);
-        case 0x37FFFF:
+            return JSON.stringify(pastWonConferenceGames);
+        case 0x3FFFFF:
             for(const game of GAMES_CACHE.mens.pastGames) {
-                if(game.gameInfo.isACCTournamentGame &&
+                if(game.gameInfo.isACCConferenceGame &&
                     !game.gameInfo.isWin) {
-                    pastLostTournamentGames.push(game);
+                    pastLostConferenceGames.push(game);
                 }
             }
-            return JSON.stringify(pastLostTournamentGames);
-        case 0x33FFFB:
+            return JSON.stringify(pastLostConferenceGames);
+        case 0x3EFFFB:
             for(const game of GAMES_CACHE.womens.pastGames) {
-                if(game.gameInfo.isACCTournamentGame &&
+                if(game.gameInfo.isACCConferenceGame &&
                     !game.gameInfo.isWin) {
-                    pastLostTournamentGames.push(game);
+                    pastLostConferenceGames.push(game);
                 }
             }
-            return JSON.stringify(pastLostTournamentGames);
+            return JSON.stringify(pastLostConferenceGames);
         
     }
 }
@@ -217,12 +297,13 @@ async function _FETCH_BASKETBALL_DATA(fetchCmd) {
     switch(fetchCmd) {
         case FETCH_CMDS.mens:
             bballSite = await fetch(SERVER_SRC_URLS.mensURL);
+            break;
         case FETCH_CMDS.womens:
             bballSite = await fetch(SERVER_SRC_URLS.womensURL);
+            break;
     };
 
     const bballText = await bballSite.text();
-    
     const bballDOM = new jsdom.JSDOM(bballText);
 
     const allGamesContainer = bballDOM.window.document.querySelector(".sidearm-schedule-games-container");
@@ -233,10 +314,8 @@ async function _FETCH_BASKETBALL_DATA(fetchCmd) {
         const gameContainer = listGame.querySelector(".sidearm-schedule-game-row");
         const oppContainer = listGame.querySelector(".sidearm-schedule-game-opponent");
         
-        // Opponent image
-        const oppImgSrc = "gopack.com" + oppContainer.querySelector(".sidearm-schedule-game-opponent-logo img").getAttribute("data-src");
+        const oppImgSrc = SERVER_SRC_URLS.prefix + oppContainer.querySelector(".sidearm-schedule-game-opponent-logo img").getAttribute("data-src");
         
-        // Opponent info
         const oppInfo = oppContainer.querySelector(".sidearm-schedule-game-opponent-details");
         const dateTime = oppInfo.querySelectorAll(".sidearm-schedule-game-opponent-date span");
 
@@ -265,80 +344,67 @@ async function _FETCH_BASKETBALL_DATA(fetchCmd) {
                 }
                 else {
                     const [numFromTime, amOrPm] = times[0].split(" ");
-                    if(numFromTime.length < 5) {
-                        let formattedTime;
-                        if(parseInt(numFromTime) >= 10) {
-                            formattedTime = numFromTime;
-                        }
-                        else {
-                            formattedTime = "0" + numFromTime;
-                        }
-                        if(numFromTime.length < 4) {
-                            gameTimes.push(formattedTime + ":00 " + amOrPm);
-                        }
-                        else {
-                            gameTimes.push(formattedTime + " " + amOrPm);
-                        }
-                    }
-                    else {
-                        gameTimes.push(numFromTime + " " + amOrPm);
-                    }
+                    updateGameTimesWithFormattedTime(numFromTime, amOrPm);
                 }
             }
         }
         else {
             if(times[0].trim() !== "TBD") {
                 const [numFromTime, amOrPm] = times[0].split(" ");
-                if(numFromTime.length < 5) {
-                    let formattedTime;
-                    if(parseInt(numFromTime) >= 10) {
-                        formattedTime = numFromTime;
-                    }
-                    else {
-                        formattedTime = "0" + numFromTime;
-                    }
-                    if(numFromTime.length < 4) {
-                        gameTimes.push(formattedTime + ":00 " + amOrPm);
-                    }
-                    else {
-                        gameTimes.push(formattedTime + " " + amOrPm);
-                    }
-                }
-                else {
-                    gameTimes.push(numFromTime + " " + amOrPm);
-                }
+                updateGameTimesWithFormattedTime(numFromTime, amOrPm);
             }
             else {
                 gameTimes.push("TBD");
             }
         }
 
+        function updateGameTimesWithFormattedTime(numFromTime, amOrPm) {
+            if(numFromTime.length < 5) {
+                let formattedTime;
+                if(parseInt(numFromTime) >= 10) {
+                    formattedTime = numFromTime;
+                }
+                else {
+                    formattedTime = "0" + numFromTime;
+                }
+                if(numFromTime.length < 4) {
+                    gameTimes.push(formattedTime + ":00 " + amOrPm);
+                }
+                else {
+                    gameTimes.push(formattedTime + " " + amOrPm);
+                }
+            }
+            else {
+                gameTimes.push(numFromTime + " " + amOrPm);
+            }
+        }
+
         const oppName = oppInfo.querySelector(".sidearm-schedule-game-opponent-text .sidearm-schedule-game-opponent-name a").
             innerHTML.replace(NAME_REGEX, "").trim();
-
-        // Game info
+        
         const gameInfo = gameContainer.querySelector(".sidearm-schedule-game-details");
         const winLossScore = gameInfo.querySelectorAll(".sidearm-schedule-game-result span");
 
         const accIndicator = oppInfo.querySelector("div div.sidearm-schedule-game-conference-conference span.sidearm-schedule-game-conference");
         const isACCGame = accIndicator != null;
 
-        let winLoss = "N/A";
-        let gameScore = "N/A";
-        let gameCity = "N/A";
-        let gameState = "N/A";
-        let gameArena = "N/A";
-        let gameCountry = "United States";
-        let networkTV = "N/A";
-        let networkRadio = "N/A";
-        let minTicketPrice = Number.MIN_SAFE_INTEGER;
-        let maxTicketPrice = Number.MAX_SAFE_INTEGER;
-        let ticketLink = "N/A";
+        let winLoss = DEFAULT_VALUES.unavailable;
+        let gameScore = DEFAULT_VALUES.unavailable;
+        let gameCity = DEFAULT_VALUES.unavailable;
+        let gameState = DEFAULT_VALUES.unavailable;
+        let gameArena = DEFAULT_VALUES.unavailable;
+        let gameCountry = DEFAULT_VALUES.country;
+        let networkTV = DEFAULT_VALUES.unavailable;
+        let networkRadio = DEFAULT_VALUES.unavailable;
+        let minTicketPrice = DEFAULT_VALUES.ticketPrices.MIN;
+        let maxTicketPrice = DEFAULT_VALUES.ticketPrices.MAX;
+        let ticketLink = DEFAULT_VALUES.unavailable;
 
         if(winLossScore[1] != undefined && winLossScore[2] != undefined) {
             winLoss = winLossScore[1].innerHTML[0];
             gameScore = winLossScore[2].innerHTML;
         }
+        const isWin = winLoss === "W";
 
         const location = gameContainer.querySelectorAll("div div.sidearm-schedule-game-location span:not(.c-tickets__icon)");
         const cityStateOrCountry = location[0].innerHTML.split(", ");
@@ -371,6 +437,9 @@ async function _FETCH_BASKETBALL_DATA(fetchCmd) {
         const radioNetwork = gameContainer.querySelector("div div.sidearm-schedule-game-coverage .sidearm-schedule-game-coverage-radio-content");
 
         if(radioNetwork != null) {
+            // All television and radio networks are scraped
+            // with hardcoded uppercase lettering; converts the
+            // case to proper
             networkRadio = radioNetwork.innerHTML.trim().replace(new RegExp("\\\w\\\S*", "g"), (txt) => {
                 return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
             });
@@ -397,8 +466,8 @@ async function _FETCH_BASKETBALL_DATA(fetchCmd) {
                     dayOfWeek: gameDOW,
                     advertisedTimes: gameTimes
                 },
-                isWin: winLoss === "W",
-                isACCTournamentGame: isACCGame,
+                isWin: isWin,
+                isACCConferenceGame: isACCGame,
                 score: gameScore,
                 location: {
                     city: gameCity,
@@ -420,25 +489,47 @@ async function _FETCH_BASKETBALL_DATA(fetchCmd) {
 
         switch(fetchCmd) {
             case FETCH_CMDS.mens:
+
                 GAMES_CACHE.mens.allGames.push(game);
 
-                if(winLoss === "N/A") {
+                if(winLoss === DEFAULT_VALUES.unavailable) {
                     GAMES_CACHE.mens.upcomingGames.push(game);
                 }
+                else if(isWin) {
+                    GAMES_CACHE.mens.wonGames.push(game);
+                }
+                else {
+                    GAMES_CACHE.mens.lostGames.push(game);
+                }
 
-                if(gameScore !== "N/A") {
+                if(gameScore !== DEFAULT_VALUES.unavailable) {
                     GAMES_CACHE.mens.pastGames.push(game);
+                }
+
+                if(isACCGame) {
+                    GAMES_CACHE.mens.conferenceGames.push(game);
                 }
                 break;
             case FETCH_CMDS.womens:
+
                 GAMES_CACHE.womens.allGames.push(game);
 
-                if(winLoss === "N/A") {
+                if(winLoss === DEFAULT_VALUES.unavailable) {
                     GAMES_CACHE.womens.upcomingGames.push(game);
                 }
+                else if(isWin) {
+                    GAMES_CACHE.womens.wonGames.push(game);
+                }
+                else {
+                    GAMES_CACHE.womens.lostGames.push(game);
+                }
 
-                if(gameScore !== "N/A") {
+                if(gameScore !== DEFAULT_VALUES.unavailable) {
                     GAMES_CACHE.womens.pastGames.push(game);
+                }
+
+                if(isACCGame) {
+                    GAMES_CACHE.womens.conferenceGames.push(game);
                 }
                 break;
         }
@@ -448,5 +539,7 @@ async function _FETCH_BASKETBALL_DATA(fetchCmd) {
 (async function _INIT_SERVER_CACHES() {
     await _FETCH_BASKETBALL_DATA(FETCH_CMDS.mens);
     await _FETCH_BASKETBALL_DATA(FETCH_CMDS.womens);
-    setTimeout(_INIT_SERVER_CACHES, 10000);
+    setTimeout(_INIT_SERVER_CACHES, SERVER_SCRAPE_INTERVAL);
 })();
+
+bballServer.listen(BBALL_SERVER_PORT);
