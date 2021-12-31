@@ -131,6 +131,8 @@ function _RETRIEVE_BASKETBALL_DATA(filters) {
     const pastWonConferenceGames = [];
     const pastLostConferenceGames = [];
 
+    filters = 0x6BC22;
+
     switch(filters) {
         case 0x1DAF5:
             return JSON.stringify(GAMES_CACHE.mens.allGames);
@@ -221,20 +223,6 @@ function _RETRIEVE_BASKETBALL_DATA(filters) {
                 }
             }
             return JSON.stringify(lostConferenceGames);
-        // case 0xFFFFF:
-        //     for(const game of GAMES_CACHE.mens.pastGames) {
-        //         if(game.gameInfo.isACCConferenceGame) {
-        //             pastConferenceGames.push(game);
-        //         }
-        //     }
-        //     return JSON.stringify(pastConferenceGames);
-        // case 0xEFFEB:
-        //     for(const game of GAMES_CACHE.womens.pastGames) {
-        //         if(game.gameInfo.isACCConferenceGame) {
-        //             pastConferenceGames.push(game);
-        //         }
-        //     }
-        //     return JSON.stringify(pastConferenceGames);
         case 0x5FEB7:
             for(const game of GAMES_CACHE.mens.upcomingGames) {
                 if(game.gameInfo.isACCConferenceGame) {
@@ -318,60 +306,26 @@ async function _FETCH_BASKETBALL_DATA(fetchCmd) {
         const gameDate = dateDOW[0];
         const gameDOW = dateDOW[1].replace(")", "");
 
-        const times = dateTime[1].innerHTML.split(" or ");
-        let gameTimes = [];
-        if(times.length > 1) {
-            for(const time of times) {
-                if(!time.includes("PM") && !time.includes("AM")) {
-                    if(time.length < 4) {
-                        let formattedTime;
-                        if(parseInt(time) >= 10) {
-                            formattedTime = time;
-                        }
-                        else {
-                            formattedTime = "0" + time;
-                        }
-                        gameTimes.push(formattedTime + ":00 PM");       // Assume game occurs in PM
+        const gameTimeDelim = dateTime[1].innerHTML.split(new RegExp("[or/]"))[0].trim();
+        const gameTime = gameTimeDelim !== "TBD" ? formatGameTime(gameTimeDelim) + " PM" : "TBD";
+
+        function formatGameTime(time) {
+            if(time.length < 5) {
+                if(time.includes(":")) {
+                    time = "0" + time;
+                    return time;
+                }
+                else {
+                    if(parseInt(time) < 10) {
+                        time = "0" + time + ":00";
                     }
                     else {
-                        gameTimes.push(time + " PM");       // Assume game occurs in PM
+                        time = time + ":00";
                     }
-                }
-                else {
-                    const [numFromTime, amOrPm] = times[0].split(" ");
-                    updateGameTimesWithFormattedTime(numFromTime, amOrPm);
+                    return time;
                 }
             }
-        }
-        else {
-            if(times[0].trim() !== "TBD") {
-                const [numFromTime, amOrPm] = times[0].split(" ");
-                updateGameTimesWithFormattedTime(numFromTime, amOrPm);
-            }
-            else {
-                gameTimes.push("TBD");
-            }
-        }
-
-        function updateGameTimesWithFormattedTime(numFromTime, amOrPm) {
-            if(numFromTime.length < 5) {
-                let formattedTime;
-                if(parseInt(numFromTime) >= 10) {
-                    formattedTime = numFromTime;
-                }
-                else {
-                    formattedTime = "0" + numFromTime;
-                }
-                if(numFromTime.length < 4) {
-                    gameTimes.push(formattedTime + ":00 " + amOrPm);
-                }
-                else {
-                    gameTimes.push(formattedTime + " " + amOrPm);
-                }
-            }
-            else {
-                gameTimes.push(numFromTime + " " + amOrPm);
-            }
+            return time;
         }
 
         const oppName = oppInfo.querySelector(".sidearm-schedule-game-opponent-text .sidearm-schedule-game-opponent-name a").
@@ -459,7 +413,7 @@ async function _FETCH_BASKETBALL_DATA(fetchCmd) {
                 time: {
                     date: gameDate,
                     dayOfWeek: gameDOW,
-                    advertisedTimes: gameTimes
+                    advertisedTime: gameTime
                 },
                 isWin: isWin,
                 isACCConferenceGame: isACCGame,
