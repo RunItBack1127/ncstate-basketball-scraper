@@ -306,7 +306,7 @@ async function _FETCH_BASKETBALL_DATA(fetchCmd) {
         const gameDate = dateDOW[0];
         const gameDOW = dateDOW[1].replace(")", "");
 
-        const gameTimeDelim = dateTime[1].innerHTML.split(new RegExp("[or/]"))[0].trim();
+        const gameTimeDelim = dateTime[1].innerHTML.split(new RegExp("[or/]"))[0].trim().replace(" PM", "");
         const gameTime = gameTimeDelim !== "TBD" ? formatGameTime(gameTimeDelim) + " PM" : "TBD";
 
         function formatGameTime(time) {
